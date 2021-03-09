@@ -490,7 +490,11 @@ void TestListenWhileConnect(const TestParam& param,
   TestAddress const& connector = param.connector;
 
   constexpr int kBacklog = 2;
-  constexpr int kClients = kBacklog + 1;
+  // Linux completes one more connection than the listen backlog argument.
+  // To ensure that there is at least one client connection that stays in
+  // connecting state, keep 2 more client connections than the listen backlog.
+  // gVisor differs in this behavior though, gvisor.dev/issue/3153.
+  constexpr int kClients = kBacklog + 2;
 
   // Create the listening socket.
   FileDescriptor listen_fd = ASSERT_NO_ERRNO_AND_VALUE(
@@ -543,6 +547,10 @@ void TestListenWhileConnect(const TestParam& param,
     ASSERT_THAT(read(client.get(), &c, sizeof(c)),
                 AnyOf(SyscallFailsWithErrno(ECONNRESET),
                       SyscallFailsWithErrno(ECONNREFUSED)));
+    // The last client connection would be in connecting (SYN_SENT) state.
+    if (client.get() == clients[kClients - 1].get()) {
+      ASSERT_EQ(errno, ECONNREFUSED) << strerror(errno);
+    }
   }
 }
 
