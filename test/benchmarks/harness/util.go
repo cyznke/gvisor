@@ -58,13 +58,16 @@ func DebugLog(b *testing.B, msg string, args ...interface{}) {
 	}
 }
 
+// FileSystemType represents a type container mount.
+type FileSystemType string
+
 const (
 	// BindFS indicates a bind mount should be created.
-	BindFS = "bindfs"
+	BindFS FileSystemType = "bindfs"
 	// TmpFS indicates a tmpfs mount should be created.
-	TmpFS = "tmpfs"
+	TmpFS FileSystemType = "tmpfs"
 	// RootFS indicates no mount should be created and the root mount should be used.
-	RootFS = "rootfs"
+	RootFS FileSystemType = "rootfs"
 )
 
 // MakeMount makes a mount and cleanup based on the requested type. Bind
@@ -72,8 +75,9 @@ const (
 // tmpfs mounts require no such backing and are just made.
 // rootfs mounts do not make a mount, but instead return a target direectory at root.
 // It is up to the caller to call the returned cleanup.
-func MakeMount(machine Machine, fsType string) ([]mount.Mount, string, func(), error) {
+func MakeMount(machine Machine, fsType FileSystemType) ([]mount.Mount, string, func(), error) {
 	mounts := make([]mount.Mount, 0, 1)
+	target := "/data"
 	switch fsType {
 	case BindFS:
 		dir, err := machine.RunCommand("mktemp", "-d")
@@ -82,22 +86,23 @@ func MakeMount(machine Machine, fsType string) ([]mount.Mount, string, func(), e
 		}
 		dir = strings.TrimSuffix(dir, "\n")
 
+		cu := func() {
+			machine.RunCommand("rm", "-rf", dir)
+		}
+
 		out, err := machine.RunCommand("chmod", "777", dir)
 		if err != nil {
-			machine.RunCommand("rm", "-rf", dir)
-			return mounts, "", func() {}, fmt.Errorf("failed modify directory: %v %s", err, out)
+			return mounts, "", cu, fmt.Errorf("failed modify directory: %v %s", err, out)
 		}
-		target := "/data"
 		mounts = append(mounts, mount.Mount{
 			Target: target,
 			Source: dir,
 			Type:   mount.TypeBind,
 		})
-		return mounts, target, func() { machine.RunCommand("rm", "-rf", dir) }, nil
+		return mounts, target, cu, nil
 	case RootFS:
-		return mounts, "/", func() {}, nil
+		return mounts, target, func() {}, nil
 	case TmpFS:
-		target := "/data"
 		mounts = append(mounts, mount.Mount{
 			Target: target,
 			Type:   mount.TypeTmpfs,

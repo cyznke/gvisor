@@ -28,8 +28,8 @@ import (
 // Dimensions here are clean/dirty cache (do or don't drop caches)
 // and if the mount on which we are compiling is a tmpfs/bind mount.
 type benchmark struct {
-	clearCache bool   // clearCache drops caches before running.
-	fstype     string // type of filesystem to use.
+	clearCache bool                   // clearCache drops caches before running.
+	fstype     harness.FileSystemType // type of filesystem to use.
 }
 
 // Note: CleanCache versions of this test require running with root permissions.
@@ -47,13 +47,13 @@ func runBuildBenchmark(b *testing.B, image, workdir, target string) {
 	b.Helper()
 	// Get a machine from the Harness on which to run.
 	machine, err := harness.GetMachine()
+	defer machine.CleanUp()
 	if err != nil {
 		b.Fatalf("failed to get machine: %v", err)
 	}
-	defer machine.CleanUp()
 
 	benchmarks := make([]benchmark, 0, 6)
-	for _, filesys := range []string{harness.BindFS, harness.TmpFS, harness.RootFS} {
+	for _, filesys := range []harness.FileSystemType{harness.BindFS, harness.TmpFS, harness.RootFS} {
 		benchmarks = append(benchmarks, benchmark{
 			clearCache: true,
 			fstype:     filesys,
@@ -75,7 +75,7 @@ func runBuildBenchmark(b *testing.B, image, workdir, target string) {
 
 		filesystem := tools.Parameter{
 			Name:  "filesystem",
-			Value: bm.fstype,
+			Value: string(bm.fstype),
 		}
 		name, err := tools.ParametersToName(pageCache, filesystem)
 		if err != nil {
@@ -104,8 +104,9 @@ func runBuildBenchmark(b *testing.B, image, workdir, target string) {
 				b.Fatalf("run failed with: %v", err)
 			}
 
+			cpCmd := fmt.Sprintf("mkdir -p %s & cp -r %s %s/.", prefix, workdir, prefix)
 			if out, err := container.Exec(ctx, dockerutil.ExecOpts{},
-				"cp", "-rf", workdir, prefix+"/."); err != nil {
+				"/bin/sh", "-c", cpCmd); err != nil {
 				b.Fatalf("failed to copy directory: %v (%s)", err, out)
 			}
 
