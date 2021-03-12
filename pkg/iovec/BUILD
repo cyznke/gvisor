@@ -6,10 +6,7 @@ go_library(
     name = "iovec",
     srcs = ["iovec.go"],
     visibility = ["//:sandbox"],
-    deps = [
-        "//pkg/abi/linux",
-        "@org_golang_x_sys//unix:go_default_library",
-    ],
+    deps = ["@org_golang_x_sys//unix:go_default_library"],
 )
 
 go_test(
