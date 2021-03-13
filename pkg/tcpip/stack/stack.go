@@ -21,8 +21,10 @@ package stack
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"io"
 	mathrand "math/rand"
 	"sync/atomic"
 	"time"
@@ -445,6 +447,9 @@ type Stack struct {
 	// used when a random number is required.
 	randomGenerator *mathrand.Rand
 
+	// secureRNG is a cryptographically secure random number generator.
+	secureRNG io.Reader
+
 	// sendBufferSize holds the min/default/max send buffer sizes for
 	// endpoints other than TCP.
 	sendBufferSize tcpip.SendBufferSizeOption
@@ -528,6 +533,9 @@ type Options struct {
 	// IPTables are the initial iptables rules. If nil, iptables will allow
 	// all traffic.
 	IPTables *IPTables
+
+	// SecureRNG is a cryptographically secure random number generator.
+	SecureRNG io.Reader
 }
 
 // TransportEndpointInfo holds useful information about a transport endpoint
@@ -636,6 +644,10 @@ func New(opts Options) *Stack {
 
 	opts.NUDConfigs.resetInvalidFields()
 
+	if opts.SecureRNG == nil {
+		opts.SecureRNG = crand.Reader
+	}
+
 	s := &Stack{
 		transportProtocols: make(map[tcpip.TransportProtocolNumber]*transportProtocolState),
 		networkProtocols:   make(map[tcpip.NetworkProtocolNumber]NetworkProtocol),
@@ -652,6 +664,7 @@ func New(opts Options) *Stack {
 		uniqueIDGenerator:  opts.UniqueID,
 		nudDisp:            opts.NUDDisp,
 		randomGenerator:    mathrand.New(randSrc),
+		secureRNG:          opts.SecureRNG,
 		sendBufferSize: tcpip.SendBufferSizeOption{
 			Min:     MinBufferSize,
 			Default: DefaultBufferSize,
@@ -2045,6 +2058,12 @@ func (s *Stack) Seed() uint32 {
 // to generate random numbers as required.
 func (s *Stack) Rand() *mathrand.Rand {
 	return s.randomGenerator
+}
+
+// SecureRNG returns the stack's cryptographically secure random number
+// generator.
+func (s *Stack) SecureRNG() io.Reader {
+	return s.secureRNG
 }
 
 func generateRandUint32() uint32 {
